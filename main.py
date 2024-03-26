@@ -1,38 +1,51 @@
-def generate_query(table_name, column_names, entries):
-    query = f"SELECT * FROM {table_name}\nWHERE "
-    conditions = []
+def generate_sql_query():
+    # Prompt user for polygon coordinates
+    print("Enter the coordinates of the polygon vertices (latitude longitude):")
+    polygon_vertices = []
+    while True:
+        vertex = input("Enter vertex (or 'done' if finished): ")
+        if vertex.lower() == 'done':
+            break
+        try:
+            lat, lon = map(float, vertex.split())
+            polygon_vertices.append((lat, lon))
+        except ValueError:
+            print("Invalid input. Please enter latitude and longitude separated by space.")
 
-    for i, values in enumerate(zip(*[entries[column] for column in column_names])):
-        column_conditions = []
-        for column_name, value in zip(column_names, values):
-            column_conditions.append(f"LOWER({column_name}) LIKE LOWER('%{value}%')")
-        conditions.append("(" + " AND ".join(column_conditions) + ")")
+    # Prompt user for the name of the area
+    area_name = input("Enter the name of the bounded area: ")
 
-    query += " OR ".join(conditions) + ";"
-    return query
+    # Generate the SQL query
+    if len(polygon_vertices) < 3:
+        print("At least three vertices are required to define a polygon.")
+        return
 
-def main():
-    table_name = input("Enter the name of the table: ")
-    num_columns = int(input("Enter the number of columns: "))
+    # Create the bounding box conditions
+    bounding_box_conditions = [
+        f"(t.lat BETWEEN {min(v[0] for v in polygon_vertices)} AND {max(v[0] for v in polygon_vertices)})",
+        f"(t.lon BETWEEN {min(v[1] for v in polygon_vertices)} AND {max(v[1] for v in polygon_vertices)})"
+    ]
 
-    column_names = []
-    for i in range(num_columns):
-        column_name = input(f"Enter the name of column {i + 1}: ")
-        column_names.append(column_name)
+    # Create the conditions for each polygon vertex
+    vertex_conditions = []
+    for v, next_v in zip(polygon_vertices, polygon_vertices[1:] + [polygon_vertices[0]]):
+        vertex_conditions.append(f"(t.lat < {next_v[0]} AND t.lon < {next_v[1]})")
 
-    entries = {column_name: [] for column_name in column_names}
-    print("Enter the list of entries for each column (one entry per line). Type 'done' for each column when finished.")
-    for column_name in column_names:
-        print(f"For column '{column_name}':")
-        while True:
-            entry = input().strip()
-            if entry.lower() == 'done':
-                break
-            entries[column_name].append(entry)
+    # Combine all conditions with OR for polygon vertices
+    polygon_condition = " OR ".join(vertex_conditions)
 
-    query = generate_query(table_name, column_names, entries)
-    print("\nGenerated SQL query:")
-    print(query)
+    # Combine all conditions into the final SQL query
+    sql_query = f"""
+    SELECT *,
+    CASE WHEN ({polygon_condition}) THEN '{area_name}' ELSE NULL END AS location
+    FROM SQL_EDITOR_All_Panama_PWandLS_Feb2023_to_Feb2024_TABLE AS t
+    WHERE
+        ({' AND '.join(bounding_box_conditions)});
+    """
+
+    return sql_query
 
 if __name__ == "__main__":
-    main()
+    sql_query = generate_sql_query()
+    print("\nGenerated SQL Query:")
+    print(sql_query)
